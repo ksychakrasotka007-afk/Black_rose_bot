@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 # ========== ПРЯМЫЕ ЗНАЧЕНИЯ ==========
-TOKEN = "8679951155:AAGd2wS6LKNAcrT8hwo60u1orB_dtnPXiX8"
+TOKEN = "8679951155:AAH7BhsfD7cTUZ5a8i-LBn6qEenX98mFVZw"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
