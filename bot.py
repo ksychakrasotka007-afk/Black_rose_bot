@@ -5,8 +5,8 @@ import time
 import threading
 import json
 import os
-import requests
 from datetime import datetime
+from clash_royale import Client
 
 # ========== НАСТРОЙКИ ==========
 TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
@@ -14,7 +14,6 @@ CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
 CLAN_TAG = "#QGQQV82P"  # замени на тег своего клана
-API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6IjI4YTMxOGY3LTAwMDAyTFLYi03ZmExLTJjNzQzM2MzY2NhNSJ9.eyJpc3MiOiJzdXBlcmNlbGwILCJhdWQiOiJzdXB1cmNlbGw6Z2FtZWFaSiIsImpoaS16IjAxZDg10DI5LTQ30TAtNDYxOS1hNGZhLWUwOWYwZTd1NmIyMyIsImlhdCI6MTc3NDAwMTI4Oswic3ViIjoiZGv2ZwxcGVyL2M3N2U5NmZkLTZ1OTctMWu5NC1kMmJmLWU0MGISYju4MDYONiIsInNjb3BlcyI6WyJyb31hbGuixSwibGltaXRzIjpbeyJoAwVyIjoiZGv2ZwxcGVyL3NpbHZIciIsInR5cGUiOiJoAHJvdHRsaW5nIn0seyJjaWRycyI6WyIWlJjAuMC4WI10sInR5cGUiOiJjbGl1bnQifV19.YxHptQHFj0GKi0yFao3PTYzqjojUzxstgMRE1_qh1iR_CdQWcSSu_ij2qoxFMOLMrPLhwaJZPopbr1IyhNFtg"
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
@@ -57,61 +56,58 @@ def group_menu():
     markup.add("📖 Команды", "🏛 Информация о клане", "🎮 Мой ник и тег")
     return markup
 
-# ========== API ЗАПРОСЫ ==========
-def api_request(endpoint):
-    url = f"https://api.clashroyale.com/v1/{endpoint}"
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Accept": "application/json"
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            return resp.json()
-        else:
-            print(f"API error {resp.status_code}: {resp.text}")
-            return None
-    except Exception as e:
-        print(f"API exception: {e}")
-        return None
+# ========== API С БИБЛИОТЕКОЙ ==========
+client = None
+try:
+    # Пытаемся создать клиента без ключа (будет использовать RoyaleAPI)
+    client = Client()
+    print("✅ Клиент Clash Royale создан (RoyaleAPI)")
+except Exception as e:
+    print(f"⚠️ Ошибка создания клиента: {e}")
 
 def get_player_data(tag):
-    tag_clean = tag.replace("#", "").upper()
-    data = api_request(f"players/%23{tag_clean}")
-    if data:
+    if not client:
+        return None
+    try:
+        player = client.get_player(tag)
         return {
-            "name": data.get("name", "?"),
-            "tag": data.get("tag", tag),
-            "trophies": data.get("trophies", 0),
-            "kingLevel": data.get("kingLevel", 0),
-            "wins": data.get("wins", 0),
-            "losses": data.get("losses", 0),
-            "highestTrophies": data.get("bestTrophies", 0),
-            "clan": data.get("clan", {}).get("name", "Нет клана"),
-            "clan_tag": data.get("clan", {}).get("tag", ""),
-            "lastSeen": data.get("lastSeen", "неизвестно"),
+            "name": player.name,
+            "tag": player.tag,
+            "trophies": player.trophies,
+            "kingLevel": player.king_level,
+            "wins": player.wins,
+            "losses": player.losses,
+            "highestTrophies": player.best_trophies,
+            "clan": player.clan.name if player.clan else "Нет клана",
+            "clan_tag": player.clan.tag if player.clan else "",
+            "lastSeen": "недавно"
         }
-    return None
+    except Exception as e:
+        print(f"Ошибка получения данных игрока: {e}")
+        return None
 
 def get_clan_data(tag):
-    tag_clean = tag.replace("#", "").upper()
-    data = api_request(f"clans/%23{tag_clean}")
-    if data:
-        members = data.get("memberList", [])
-        members_sorted = sorted(members, key=lambda x: x.get("trophies", 0), reverse=True)[:10]
+    if not client:
+        return None
+    try:
+        clan = client.get_clan(tag)
+        members = clan.members
+        members_sorted = sorted(members, key=lambda x: x.trophies, reverse=True)[:10]
         return {
-            "name": data.get("name", "?"),
-            "tag": data.get("tag", tag),
-            "type": data.get("type", "?"),
-            "members": data.get("members", 0),
-            "requiredTrophies": data.get("requiredTrophies", 0),
-            "location": data.get("location", {}).get("name", "Международный"),
-            "clanScore": data.get("clanScore", 0),
-            "clanWarTrophies": data.get("clanWarTrophies", 0),
-            "description": data.get("description", "Нет описания"),
-            "top_members": [{"name": m["name"], "trophies": m["trophies"]} for m in members_sorted]
+            "name": clan.name,
+            "tag": clan.tag,
+            "type": clan.type,
+            "members": clan.members_count,
+            "requiredTrophies": clan.required_trophies,
+            "location": clan.location.name if clan.location else "Международный",
+            "clanScore": clan.clan_score,
+            "clanWarTrophies": clan.war_trophies,
+            "description": clan.description[:200] if clan.description else "Нет описания",
+            "top_members": [{"name": m.name, "trophies": m.trophies} for m in members_sorted]
         }
-    return None
+    except Exception as e:
+        print(f"Ошибка получения данных клана: {e}")
+        return None
 
 def update_clan_cache():
     data = get_clan_data(CLAN_TAG)
@@ -197,6 +193,7 @@ def save_tag_command(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
 
+# ========== ИСПРАВЛЕННАЯ КОМАНДА /list (работает везде) ==========
 @bot.message_handler(commands=['list'])
 def list_nicks(message):
     if not game_nicks:
