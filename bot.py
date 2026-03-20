@@ -13,7 +13,7 @@ TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
-CLAN_TAG = "#82YYCPUP2"  # Тег клана (вставь свой)
+CLAN_TAG = "#QGQQV82P"  # Тег клана (вставь свой)
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
