@@ -8,16 +8,13 @@ import os
 import requests
 from datetime import datetime
 
-# ========== НАСТРОЙКИ ==========
 TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
-# ================================
 
 bot = telebot.TeleBot(TOKEN)
 
-# ========== ХРАНИЛИЩЕ ==========
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -40,7 +37,6 @@ votes = load_json(VOTE_FILE)
 def is_admin(user_id):
     return user_id == ADMIN_ID
 
-# ========== КНОПКИ ==========
 def nick_button():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➕ Добавить свой ник")
@@ -51,7 +47,6 @@ def group_menu():
     markup.add("📖 Команды")
     return markup
 
-# ========== КОМАНДЫ ==========
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.send_message(message.chat.id,
@@ -157,7 +152,6 @@ def results_command(message):
         text += f"🤔 Ещё не голосовали ({len(not_voted)})"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# ========== МЕНЮ В ГРУППЕ ==========
 @bot.message_handler(commands=['menu'])
 def menu_command(message):
     if message.chat.type in ['group', 'supergroup']:
@@ -179,7 +173,6 @@ def commands_list(message):
     )
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# ========== ПРИВЕТСТВИЕ ==========
 @bot.message_handler(content_types=['new_chat_members'])
 def welcome(message):
     for user in message.new_chat_members:
@@ -191,7 +184,6 @@ def welcome(message):
         except:
             pass
 
-# ========== ОПРОСЫ ==========
 def start_voting():
     global votes
     votes = {}
@@ -253,7 +245,6 @@ def startvote_command(message):
     else:
         bot.reply_to(message, "❌ Только админ")
 
-# ========== РАСПИСАНИЕ ==========
 def daily_vote():
     now = datetime.now()
     if now.weekday() in [2, 3, 4, 5, 6]:
@@ -266,7 +257,6 @@ def run_schedule():
         schedule.run_pending()
         time.sleep(60)
 
-# ========== ЗАПУСК ==========
 if __name__ == "__main__":
     try:
         requests.get(f"https://api.telegram.org/bot{TOKEN}/deleteWebhook")
