@@ -5,15 +5,15 @@ import time
 import threading
 import json
 import os
+import requests
 from datetime import datetime
-from clash_royale import Client
 
 # ========== НАСТРОЙКИ ==========
 TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
-CLAN_TAG = "#QGQQV82P"  # замени на тег своего клана
+CLAN_TAG = "#2LQ8G0C"  # замени на тег своего клана
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
@@ -56,58 +56,56 @@ def group_menu():
     markup.add("📖 Команды", "🏛 Информация о клане", "🎮 Мой ник и тег")
     return markup
 
-# ========== API С БИБЛИОТЕКОЙ ==========
-client = None
-try:
-    # Пытаемся создать клиента без ключа (будет использовать RoyaleAPI)
-    client = Client()
-    print("✅ Клиент Clash Royale создан (RoyaleAPI)")
-except Exception as e:
-    print(f"⚠️ Ошибка создания клиента: {e}")
-
+# ========== API ЗАПРОСЫ (без ключа, через RoyaleAPI) ==========
 def get_player_data(tag):
-    if not client:
-        return None
+    """Получает данные игрока через RoyaleAPI"""
+    tag_clean = tag.replace("#", "").upper()
+    url = f"https://royaleapi.com/api/player/{tag_clean}"
     try:
-        player = client.get_player(tag)
-        return {
-            "name": player.name,
-            "tag": player.tag,
-            "trophies": player.trophies,
-            "kingLevel": player.king_level,
-            "wins": player.wins,
-            "losses": player.losses,
-            "highestTrophies": player.best_trophies,
-            "clan": player.clan.name if player.clan else "Нет клана",
-            "clan_tag": player.clan.tag if player.clan else "",
-            "lastSeen": "недавно"
-        }
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "name": data.get("name", "?"),
+                "tag": data.get("tag", tag),
+                "trophies": data.get("trophies", 0),
+                "kingLevel": data.get("kingLevel", 0),
+                "wins": data.get("wins", 0),
+                "losses": data.get("losses", 0),
+                "highestTrophies": data.get("bestTrophies", 0),
+                "clan": data.get("clan", {}).get("name", "Нет клана"),
+                "clan_tag": data.get("clan", {}).get("tag", ""),
+                "lastSeen": data.get("lastSeen", "неизвестно"),
+            }
     except Exception as e:
-        print(f"Ошибка получения данных игрока: {e}")
-        return None
+        print(f"Ошибка API игрока: {e}")
+    return None
 
 def get_clan_data(tag):
-    if not client:
-        return None
+    """Получает данные клана через RoyaleAPI"""
+    tag_clean = tag.replace("#", "").upper()
+    url = f"https://royaleapi.com/api/clan/{tag_clean}"
     try:
-        clan = client.get_clan(tag)
-        members = clan.members
-        members_sorted = sorted(members, key=lambda x: x.trophies, reverse=True)[:10]
-        return {
-            "name": clan.name,
-            "tag": clan.tag,
-            "type": clan.type,
-            "members": clan.members_count,
-            "requiredTrophies": clan.required_trophies,
-            "location": clan.location.name if clan.location else "Международный",
-            "clanScore": clan.clan_score,
-            "clanWarTrophies": clan.war_trophies,
-            "description": clan.description[:200] if clan.description else "Нет описания",
-            "top_members": [{"name": m.name, "trophies": m.trophies} for m in members_sorted]
-        }
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            members = data.get("members", [])
+            members_sorted = sorted(members, key=lambda x: x.get("trophies", 0), reverse=True)[:10]
+            return {
+                "name": data.get("name", "?"),
+                "tag": data.get("tag", tag),
+                "type": data.get("type", "?"),
+                "members": data.get("members", 0),
+                "requiredTrophies": data.get("requiredTrophies", 0),
+                "location": data.get("location", {}).get("name", "Международный"),
+                "clanScore": data.get("clanScore", 0),
+                "clanWarTrophies": data.get("clanWarTrophies", 0),
+                "description": data.get("description", "Нет описания"),
+                "top_members": [{"name": m["name"], "trophies": m["trophies"]} for m in members_sorted]
+            }
     except Exception as e:
-        print(f"Ошибка получения данных клана: {e}")
-        return None
+        print(f"Ошибка API клана: {e}")
+    return None
 
 def update_clan_cache():
     data = get_clan_data(CLAN_TAG)
@@ -120,8 +118,6 @@ def update_clan_cache():
 # ========== КОМАНДЫ ==========
 @bot.message_handler(commands=['start'])
 def start(message):
-    if message.chat.type in ['group', 'supergroup']:
-        return
     bot.send_message(message.chat.id,
         "👋 Привет! Я бот клана Black Rose.\n\n"
         "Нажми кнопку «Добавить свой ник» и напиши свой игровой ник.",
@@ -129,8 +125,6 @@ def start(message):
 
 @bot.message_handler(func=lambda m: m.text == "➕ Добавить свой ник")
 def ask_nick(message):
-    if message.chat.type in ['group', 'supergroup']:
-        return
     msg = bot.send_message(message.chat.id, "📝 Напиши свой игровой ник (например: xX_Warrior_Xx):")
     bot.register_next_step_handler(msg, save_nick)
 
@@ -150,8 +144,6 @@ def save_nick(message):
 
 @bot.message_handler(commands=['nick'])
 def save_nick_command(message):
-    if message.chat.type in ['group', 'supergroup']:
-        return
     try:
         parts = message.text.split()
         if len(parts) < 2:
@@ -171,8 +163,6 @@ def save_nick_command(message):
 
 @bot.message_handler(commands=['tag'])
 def save_tag_command(message):
-    if message.chat.type in ['group', 'supergroup']:
-        return
     try:
         parts = message.text.split()
         if len(parts) < 2:
@@ -193,7 +183,6 @@ def save_tag_command(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
 
-# ========== ИСПРАВЛЕННАЯ КОМАНДА /list (работает везде) ==========
 @bot.message_handler(commands=['list'])
 def list_nicks(message):
     if not game_nicks:
@@ -429,7 +418,15 @@ def run_schedule():
         schedule.run_pending()
         time.sleep(60)
 
+# ========== ЗАПУСК ==========
 if __name__ == "__main__":
+    # Принудительный сброс вебхука
+    try:
+        requests.get(f"https://api.telegram.org/bot{TOKEN}/deleteWebhook")
+        print("✅ Webhook deleted")
+    except Exception as e:
+        print(f"❌ Webhook delete error: {e}")
+    
     print("🚀 Бот для клановых войн запущен...")
     print(f"Сохранено игровых ников: {len(game_nicks)}")
     print(f"Сохранено тегов: {len(player_tags)}")
@@ -441,6 +438,5 @@ if __name__ == "__main__":
     update_clan_cache()
     schedule.every(6).hours.do(update_clan_cache)
     
-    bot.remove_webhook()
     threading.Thread(target=run_schedule, daemon=True).start()
     bot.infinity_polling()
