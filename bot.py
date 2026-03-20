@@ -13,19 +13,19 @@ TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
-CLAN_TAG = "#QGQQV82P"  # тег клана
+CLAN_TAG = "#QGQQV82P"  # замени на тег своего клана
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
 
-# ========== ПОСТОЯННОЕ ХРАНИЛИЩЕ ==========
+# ========== ХРАНИЛИЩЕ ==========
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 NICK_FILE = os.path.join(DATA_DIR, "game_nicks.json")
 VOTE_FILE = os.path.join(DATA_DIR, "votes.json")
-PLAYER_TAGS_FILE = os.path.join(DATA_DIR, "player_tags.json")
-# ==========================================
+TAG_FILE = os.path.join(DATA_DIR, "player_tags.json")
+CLAN_CACHE_FILE = os.path.join(DATA_DIR, "clan_cache.json")
 
 def load_json(file):
     if os.path.exists(file):
@@ -39,77 +39,73 @@ def save_json(file, data):
 
 game_nicks = load_json(NICK_FILE)
 votes = load_json(VOTE_FILE)
-player_tags = load_json(PLAYER_TAGS_FILE)
+player_tags = load_json(TAG_FILE)
+clan_cache = load_json(CLAN_CACHE_FILE)
 
 def is_admin(user_id):
     return user_id == ADMIN_ID
 
+# ========== КНОПКИ ==========
 def nick_button():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➕ Добавить свой ник")
     return markup
 
-# ========== API С БИБЛИОТЕКОЙ (попытка) ==========
-try:
-    from clash_royale import Client
-    client = Client()
-    print("✅ Библиотека clash-royale-python загружена")
-except:
-    client = None
-    print("⚠️ Библиотека не загружена, используем резервный RoyaleAPI")
+def group_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add("📖 Команды", "🏛 Информация о клане", "🎮 Мой ник и тег")
+    return markup
 
+# ========== API ==========
 def get_player_data(tag):
     tag_clean = tag.replace("#", "").upper()
-    data = None
-    
-    # 1. Пробуем официальный API через библиотеку
-    if client:
-        try:
-            player = client.get_player(tag)
-            data = {
-                "name": player.name,
-                "tag": player.tag,
-                "trophies": player.trophies,
-                "kingLevel": player.king_level,
-                "wins": player.wins,
-                "losses": player.losses,
-                "highestTrophies": player.best_trophies,
-                "clan": player.clan.name if player.clan else "Нет клана",
-                "clan_tag": player.clan.tag if player.clan else "",
-                "lastSeen": "недавно"
+    url = f"https://royaleapi.com/api/player/{tag_clean}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return {"name": data.get("name", "?")}
+    except:
+        pass
+    return None
+
+def get_clan_data(tag):
+    tag_clean = tag.replace("#", "").upper()
+    url = f"https://royaleapi.com/api/clan/{tag_clean}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            members = data.get("members", [])
+            top = sorted(members, key=lambda x: x.get("trophies", 0), reverse=True)[:10]
+            return {
+                "name": data.get("name", "?"),
+                "tag": data.get("tag", tag),
+                "members": data.get("members", 0),
+                "requiredTrophies": data.get("requiredTrophies", 0),
+                "location": data.get("location", {}).get("name", "Международный"),
+                "clanScore": data.get("clanScore", 0),
+                "clanWarTrophies": data.get("clanWarTrophies", 0),
+                "description": data.get("description", "Нет описания"),
+                "top_members": [{"name": m["name"], "trophies": m["trophies"]} for m in top]
             }
-        except Exception as e:
-            print(f"Ошибка библиотеки: {e}")
-    
-    # 2. Если библиотека не сработала — используем RoyaleAPI
-    if not data:
-        try:
-            url = f"https://royaleapi.com/api/player/{tag_clean}"
-            resp = requests.get(url, timeout=10)
-            if resp.status_code == 200:
-                d = resp.json()
-                data = {
-                    "name": d.get("name", "?"),
-                    "tag": d.get("tag", tag),
-                    "trophies": d.get("trophies", 0),
-                    "kingLevel": d.get("kingLevel", 0),
-                    "wins": d.get("wins", 0),
-                    "losses": d.get("losses", 0),
-                    "highestTrophies": d.get("bestTrophies", 0),
-                    "clan": d.get("clan", {}).get("name", "Нет клана"),
-                    "clan_tag": d.get("clan", {}).get("tag", ""),
-                    "lastSeen": d.get("lastSeen", "неизвестно")
-                }
-        except Exception as e:
-            print(f"Ошибка RoyaleAPI: {e}")
-    
-    return data
+    except:
+        pass
+    return None
+
+def update_clan_cache():
+    data = get_clan_data(CLAN_TAG)
+    if data:
+        clan_cache["data"] = data
+        clan_cache["last_update"] = datetime.now().isoformat()
+        save_json(CLAN_CACHE_FILE, clan_cache)
 
 # ========== КОМАНДЫ ==========
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.send_message(message.chat.id,
-        "👋 Привет! Я бот клана Black Rose.\n\nНажми кнопку «Добавить свой ник» и напиши свой игровой ник.",
+        "👋 Привет! Я бот клана Black Rose.\n\n"
+        "Нажми кнопку и напиши свой игровой ник.",
         reply_markup=nick_button())
 
 @bot.message_handler(func=lambda m: m.text == "➕ Добавить свой ник")
@@ -120,10 +116,10 @@ def ask_nick(message):
 def save_nick(message):
     nick = message.text.strip()
     if len(nick) < 2 or len(nick) > 30:
-        bot.send_message(message.chat.id, "❌ Слишком коротко или длинно. Попробуй ещё раз.", reply_markup=nick_button())
+        bot.send_message(message.chat.id, "❌ Слишком коротко или длинно. Попробуй ещё.", reply_markup=nick_button())
         return
-    user_id = str(message.from_user.id)
-    game_nicks[user_id] = {
+    uid = str(message.from_user.id)
+    game_nicks[uid] = {
         "game_nick": nick,
         "tg_username": message.from_user.username,
         "first_name": message.from_user.first_name
@@ -131,14 +127,53 @@ def save_nick(message):
     save_json(NICK_FILE, game_nicks)
     bot.send_message(message.chat.id, f"✅ Ник **{nick}** сохранён!", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
 
+@bot.message_handler(commands=['nick'])
+def nick_command(message):
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ /nick ТвойНик")
+            return
+        nick = parts[1]
+        uid = str(message.from_user.id)
+        game_nicks[uid] = {
+            "game_nick": nick,
+            "tg_username": message.from_user.username,
+            "first_name": message.from_user.first_name
+        }
+        save_json(NICK_FILE, game_nicks)
+        bot.reply_to(message, f"✅ Ник **{nick}** сохранён!", parse_mode="Markdown")
+    except:
+        bot.reply_to(message, "❌ Ошибка")
+
+@bot.message_handler(commands=['tag'])
+def tag_command(message):
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ /tag #твой_тег")
+            return
+        tag = parts[1].strip()
+        if not tag.startswith("#"):
+            tag = "#" + tag
+        data = get_player_data(tag)
+        if not data:
+            bot.reply_to(message, "❌ Тег не найден. Проверь и попробуй ещё.")
+            return
+        uid = str(message.from_user.id)
+        player_tags[uid] = tag
+        save_json(TAG_FILE, player_tags)
+        bot.reply_to(message, f"✅ Тег **{tag}** сохранён для **{data['name']}**!")
+    except:
+        bot.reply_to(message, "❌ Ошибка")
+
 @bot.message_handler(commands=['list'])
-def list_nicks(message):
+def list_command(message):
     if not game_nicks:
         bot.send_message(message.chat.id, "📭 База пуста.")
         return
     text = "📋 **Список ников:**\n"
-    items = list(game_nicks.items())
-    for idx, (uid, data) in enumerate(items, 1):
+    for idx, (uid, data) in enumerate(game_nicks.items(), 1):
         text += f"{idx}. 🎮 {data['game_nick']}"
         if data.get('tg_username'):
             text += f" (@{data['tg_username']})"
@@ -147,66 +182,199 @@ def list_nicks(message):
         text += "\n🔧 Админ: /del НОМЕР — удалить игрока"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(commands=['tag'])
-def save_tag(message):
+@bot.message_handler(commands=['del'])
+def delete_command(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ Только админ.")
+        return
     try:
         parts = message.text.split()
         if len(parts) < 2:
-            bot.reply_to(message, "❌ Напиши так: /tag #твой_тег")
+            bot.reply_to(message, "❌ /del НОМЕР")
             return
-        tag = parts[1].strip()
-        if not tag.startswith("#"):
-            tag = "#" + tag
-        
-        data = get_player_data(tag)
-        if not data:
-            bot.reply_to(message, "❌ Тег не найден в Clash Royale. Проверь и попробуй ещё раз.")
-            return
-        
-        user_id = str(message.from_user.id)
-        player_tags[user_id] = tag
-        save_json(PLAYER_TAGS_FILE, player_tags)
-        
-        # Выводим полную статистику
-        stats = (
-            f"✅ Тег **{tag}** сохранён для игрока **{data['name']}**!\n\n"
-            f"🏆 Трофеи: {data['trophies']}\n"
-            f"👑 Уровень короля: {data['kingLevel']}\n"
-            f"⚔️ Победы: {data['wins']}\n"
-            f"💔 Поражения: {data['losses']}\n"
-            f"🎯 Максимум трофеев: {data['highestTrophies']}\n"
-            f"🏛 Клан: {data['clan']}\n"
-            f"📅 Последний бой: {data['lastSeen']}"
-        )
-        bot.reply_to(message, stats, parse_mode="Markdown")
-        
-    except Exception as e:
-        bot.reply_to(message, f"❌ Ошибка: {e}")
-
-# ========== ОСТАЛЬНЫЕ КОМАНДЫ (упрощённо) ==========
-@bot.message_handler(commands=['del'])
-def delete_nick(message):
-    if not is_admin(message.from_user.id):
-        bot.reply_to(message, "❌ Только админ")
-        return
-    try:
-        num = int(message.text.split()[1])
+        num = int(parts[1])
         items = list(game_nicks.items())
-        if 1 <= num <= len(items):
-            uid, _ = items[num-1]
-            del game_nicks[uid]
-            if uid in player_tags:
-                del player_tags[uid]
-            save_json(NICK_FILE, game_nicks)
-            save_json(PLAYER_TAGS_FILE, player_tags)
-            bot.reply_to(message, f"✅ Игрок удалён")
-            list_nicks(message)
+        if num < 1 or num > len(items):
+            bot.reply_to(message, f"❌ Номер от 1 до {len(items)}")
+            return
+        uid, data = items[num-1]
+        nick = data['game_nick']
+        del game_nicks[uid]
+        if uid in player_tags:
+            del player_tags[uid]
+        save_json(NICK_FILE, game_nicks)
+        save_json(TAG_FILE, player_tags)
+        bot.reply_to(message, f"✅ Игрок {nick} удалён.")
+        list_command(message)
     except:
-        bot.reply_to(message, "❌ Пример: /del 2")
+        bot.reply_to(message, "❌ Ошибка")
 
 @bot.message_handler(commands=['whoami'])
 def whoami(message):
     bot.reply_to(message, f"Твой ID: {message.from_user.id}")
+
+@bot.message_handler(commands=['results'])
+def results_command(message):
+    if not votes:
+        bot.send_message(message.chat.id, "📭 Голосование не проводилось.")
+        return
+    yes = [game_nicks.get(uid, {}).get("game_nick", "?") for uid, v in votes.items() if v == "yes"]
+    no = [game_nicks.get(uid, {}).get("game_nick", "?") for uid, v in votes.items() if v == "no"]
+    not_voted = [game_nicks[uid]["game_nick"] for uid in game_nicks if uid not in votes]
+    text = "**📊 Текущие результаты:**\n\n"
+    if yes:
+        text += f"✅ Идут ({len(yes)}):\n" + "\n".join(f"🎮 {n}" for n in yes) + "\n\n"
+    if no:
+        text += f"❌ Не идут ({len(no)}):\n" + "\n".join(f"🎮 {n}" for n in no) + "\n\n"
+    if not_voted:
+        text += f"🤔 Ещё не голосовали ({len(not_voted)})"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+# ========== МЕНЮ В ГРУППЕ ==========
+@bot.message_handler(commands=['menu'])
+def menu_command(message):
+    if message.chat.type in ['group', 'supergroup']:
+        bot.send_message(message.chat.id, "📋 **Меню клана:**", parse_mode="Markdown", reply_markup=group_menu())
+
+@bot.message_handler(func=lambda m: m.text == "📖 Команды")
+def commands_list(message):
+    text = (
+        "📖 **Команды бота:**\n\n"
+        "👥 **Для всех:**\n"
+        "/start — запустить бота\n"
+        "/nick [ник] — сохранить игровой ник\n"
+        "/tag [тег] — сохранить тег Clash Royale\n"
+        "/list — список ников\n"
+        "/whoami — твой ID\n"
+        "/results — текущие голоса\n\n"
+        "👑 **Админ:**\n"
+        "/del [номер] — удалить игрока\n"
+        "/startvote — запустить опрос"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "🏛 Информация о клане")
+def clan_info(message):
+    data = get_clan_data(CLAN_TAG)
+    if not data and clan_cache.get("data"):
+        data = clan_cache["data"]
+        cache_time = clan_cache.get("last_update", "неизвестно")
+        cache_note = f"\n⚠️ Данные из кэша от {cache_time} (API временно недоступен)"
+    else:
+        cache_note = ""
+    if not data:
+        bot.send_message(message.chat.id, "❌ Не удалось получить данные клана.")
+        return
+    text = (
+        f"🏛 **Клан {data['name']}:**\n\n"
+        f"🏷 Тег: {data['tag']}\n"
+        f"👥 Участников: {data['members']}/50\n"
+        f"🏆 Требуемые трофеи: {data['requiredTrophies']}\n"
+        f"🏴 Регион: {data['location']}\n"
+        f"💪 Очки клана: {data['clanScore']}\n"
+        f"⚔️ Военные трофеи: {data['clanWarTrophies']}\n"
+        f"📋 Описание: {data['description'][:200]}\n\n"
+        "📊 **Топ-10 игроков:**\n"
+    )
+    for i, m in enumerate(data['top_members'][:10], 1):
+        text += f"{i}. {m['name']} ({m['trophies']} 🏆)\n"
+    text += cache_note
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "🎮 Мой ник и тег")
+def my_info(message):
+    uid = str(message.from_user.id)
+    nick = game_nicks.get(uid, {}).get("game_nick", "не сохранён")
+    tag = player_tags.get(uid, "не сохранён")
+    text = f"🎮 **Твой игровой ник:** {nick}\n🏷 **Твой тег:** {tag}"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+# ========== ОПРОСЫ ==========
+def start_voting():
+    global votes
+    votes = {}
+    save_json(VOTE_FILE, votes)
+    bot.send_message(CHAT_ID, "📢 **Голосование на КВ началось!** Ответьте в личку.", parse_mode="Markdown")
+    for uid, data in game_nicks.items():
+        try:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton("✅ Да", callback_data=f"vote_yes_{uid}"),
+                types.InlineKeyboardButton("❌ Нет", callback_data=f"vote_no_{uid}")
+            )
+            bot.send_message(uid, f"⚔️ **КВ завтра. Ты идёшь?**\n\nТвой ник: {data['game_nick']}", parse_mode="Markdown", reply_markup=markup)
+        except:
+            pass
+    threading.Timer(12 * 60 * 60, finish_voting).start()
+
+def finish_voting():
+    yes = []
+    no = []
+    for uid, v in votes.items():
+        nick = game_nicks.get(uid, {}).get("game_nick", "?")
+        if v == "yes":
+            yes.append(f"✅ {nick}")
+        else:
+            no.append(f"❌ {nick}")
+    text = "**📊 Итоги голосования:**\n\n"
+    if yes:
+        text += "✅ **Идут:**\n" + "\n".join(yes) + "\n\n"
+    if no:
+        text += "❌ **Не идут:**\n" + "\n".join(no)
+    bot.send_message(CHAT_ID, text, parse_mode="Markdown")
+    votes.clear()
+    save_json(VOTE_FILE, votes)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('vote_'))
+def handle_vote(call):
+    uid = str(call.from_user.id)
+    _, vote_type, target = call.data.split('_')
+    if uid != target:
+        bot.answer_callback_query(call.id, "❌ Нельзя за другого")
+        return
+    if uid not in game_nicks:
+        bot.answer_callback_query(call.id, "❌ Сохрани ник через /nick")
+        return
+    if uid in votes:
+        bot.answer_callback_query(call.id, "❌ Ты уже голосовал")
+        return
+    votes[uid] = vote_type
+    save_json(VOTE_FILE, votes)
+    bot.answer_callback_query(call.id, "✅ Голос принят!")
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+
+@bot.message_handler(commands=['startvote'])
+def startvote_command(message):
+    if is_admin(message.from_user.id):
+        start_voting()
+        bot.reply_to(message, "✅ Голосование запущено!")
+    else:
+        bot.reply_to(message, "❌ Только админ")
+
+# ========== ПРИВЕТСТВИЕ ==========
+@bot.message_handler(content_types=['new_chat_members'])
+def welcome(message):
+    for user in message.new_chat_members:
+        if user.id == bot.get_me().id:
+            continue
+        bot.send_message(message.chat.id, f"👋 {user.first_name}, напиши боту в личку @{BOT_USERNAME} и нажми «Добавить свой ник»")
+        try:
+            bot.send_message(user.id, "👋 Сохрани свой игровой ник:", reply_markup=nick_button())
+        except:
+            pass
+
+# ========== РАСПИСАНИЕ ==========
+def daily_vote():
+    now = datetime.now()
+    if now.weekday() in [2, 3, 4, 5, 6]:
+        start_voting()
+
+schedule.every().day.at("19:00").do(daily_vote)
+
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
 
 # ========== ЗАПУСК ==========
 if __name__ == "__main__":
@@ -218,4 +386,12 @@ if __name__ == "__main__":
 
     print("🚀 Бот запущен")
     print(f"Сохранено ников: {len(game_nicks)}")
+    print(f"Сохранено тегов: {len(player_tags)}")
+    print(f"Админ ID: {ADMIN_ID}")
+    print(f"Бот: @{BOT_USERNAME}")
+
+    update_clan_cache()
+    schedule.every(6).hours.do(update_clan_cache)
+
+    threading.Thread(target=run_schedule, daemon=True).start()
     bot.infinity_polling()
