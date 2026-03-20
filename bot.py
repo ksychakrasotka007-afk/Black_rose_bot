@@ -7,29 +7,23 @@ import json
 import os
 from datetime import datetime
 
-# ========== ТВОИ ДАННЫЕ ==========
-TOKEN = "8679951155:AAH7BhsfD7cTUZ5a8i-LBn6qEenX98mFVZw"
+# ========== НОВЫЙ ТОКЕН ==========
+TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
-NICK_FILE = "game_nicks.json"
-VOTE_FILE = "votes.json"
 
-# ========== ЗАЩИТА ОТ ДУБЛЕЙ ==========
-last_processed = {}
+# ========== ПОСТОЯННОЕ ХРАНИЛИЩЕ ==========
+DATA_DIR = "/app/data"
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
-def anti_duplicate(func):
-    def wrapper(message):
-        message_key = f"{message.chat.id}_{message.message_id}"
-        if message_key in last_processed:
-            return
-        last_processed[message_key] = True
-        return func(message)
-    return wrapper
-# ======================================
+NICK_FILE = os.path.join(DATA_DIR, "game_nicks.json")
+VOTE_FILE = os.path.join(DATA_DIR, "votes.json")
+# ==========================================
 
 def load_nicks():
     if os.path.exists(NICK_FILE):
@@ -64,16 +58,18 @@ def nick_button():
     return markup
 
 @bot.message_handler(commands=['start'])
-@anti_duplicate
 def start(message):
+    if message.chat.type in ['group', 'supergroup']:
+        return
     bot.send_message(message.chat.id,
         "👋 Привет! Я бот клана **Black Rose**.\n\n"
         "🎮 Нажми кнопку **«Добавить свой ник»** и напиши свой игровой ник.",
         parse_mode="Markdown", reply_markup=nick_button())
 
 @bot.message_handler(commands=['nick'])
-@anti_duplicate
 def save_nick_command(message):
+    if message.chat.type in ['group', 'supergroup']:
+        return
     try:
         parts = message.text.split()
         if len(parts) < 2:
@@ -92,8 +88,9 @@ def save_nick_command(message):
         bot.reply_to(message, "❌ Ошибка. Попробуй ещё раз.")
 
 @bot.message_handler(func=lambda message: message.text == "➕ Добавить свой ник")
-@anti_duplicate
 def ask_nick(message):
+    if message.chat.type in ['group', 'supergroup']:
+        return
     msg = bot.send_message(message.chat.id, "📝 Напиши свой игровой ник (например: xX_Warrior_Xx):")
     bot.register_next_step_handler(msg, save_nick)
 
@@ -112,7 +109,6 @@ def save_nick(message):
     bot.send_message(message.chat.id, f"✅ Ник **{nick}** сохранён!", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
 
 @bot.message_handler(commands=['list'])
-@anti_duplicate
 def list_nicks(message):
     if not game_nicks:
         bot.send_message(message.chat.id, "📭 База пуста.")
@@ -129,7 +125,6 @@ def list_nicks(message):
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['del'])
-@anti_duplicate
 def delete_nick(message):
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ Только админ может удалять игроков.")
@@ -156,12 +151,10 @@ def delete_nick(message):
         bot.reply_to(message, f"❌ Ошибка: {e}")
 
 @bot.message_handler(commands=['whoami'])
-@anti_duplicate
 def whoami(message):
     bot.reply_to(message, f"Твой ID: {message.from_user.id}")
 
 @bot.message_handler(content_types=['new_chat_members'])
-@anti_duplicate
 def welcome(message):
     for user in message.new_chat_members:
         if user.id == bot.get_me().id:
@@ -246,7 +239,6 @@ def handle_vote(call):
         bot.send_message(call.message.chat.id, f"❌ Твой голос учтён: ты не идёшь на КВ.")
 
 @bot.message_handler(commands=['startvote'])
-@anti_duplicate
 def start_vote_command(message):
     if is_admin(message.from_user.id):
         start_voting()
@@ -255,7 +247,6 @@ def start_vote_command(message):
         bot.reply_to(message, "❌ Только админ может запустить голосование.")
 
 @bot.message_handler(commands=['results'])
-@anti_duplicate
 def results_command(message):
     if not votes:
         bot.send_message(message.chat.id, "📭 Голосование ещё не проводилось.")
@@ -298,5 +289,7 @@ if __name__ == "__main__":
     print(f"Сохранено игровых ников: {len(game_nicks)}")
     print(f"Админ ID: {ADMIN_ID}")
     print(f"Бот: @{BOT_USERNAME}")
+    print(f"📁 Данные хранятся в: {DATA_DIR}")
+    bot.remove_webhook()
     threading.Thread(target=run_schedule, daemon=True).start()
     bot.infinity_polling()
