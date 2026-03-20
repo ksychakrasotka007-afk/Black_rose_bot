@@ -14,7 +14,7 @@ CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
 CLAN_TAG = "#QGQQV82P"  # замени на тег своего клана
-API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6IjI4YTMxOGY3LTAwMDAtYTFhYi03ZmExLTJjNzQzM2MzY2NhNSJ9.eyJpc3MiOiJzdXBlcmNlbGwiLCJhdWQiOiJzdXBlcmNlbGw6Z2FtZWFwaSIsImp0aSI6IjRjMTdjMGYtNThhNC00YzM5LWExYzItMGFkMDUzZjQ2ZWUiLCJpYXQiOjE3NzM5OTYwNzIsInN1YiI6ImRldmVsb3Blci9jNzdlOTZmZC0yOTk3LTRiNC1kMmJmLWE0MGI5YjU4MDY2NiIsInNjb3BlcyI6WyJyb3lhbGUiXSwibGltaXRzIjpbeyJoYXJkZXIiOiJkZXZlbG9wZXIvc2lsdmVyIiwidHlwZSI6InRocm90dGxpbmcifSx7ImNpZHJzIjpbIjAuMC4wLjAiXSwidHlwZSI6ImNsaWVudCJ9XX0.xBFhIWm9sbck-55Eyjg21231tUIFkNStw0LF_BwPToqY1DoXLbHUE_hTur1PgkV8SLsJYCLPhpKqspjJSjVOQ"
+API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6IjI4YTMxOGY3LTAwMDAyTFLYi03ZmExLTJjNzQzM2MzY2NhNSJ9.eyJpc3MiOiJzdXBlcmNlbGwILCJhdWQiOiJzdXB1cmNlbGw6Z2FtZWFaSiIsImpoaS16IjAxZDg10DI5LTQ30TAtNDYxOS1hNGZhLWUwOWYwZTd1NmIyMyIsImlhdCI6MTc3NDAwMTI4Oswic3ViIjoiZGv2ZwxcGVyL2M3N2U5NmZkLTZ1OTctMWu5NC1kMmJmLWU0MGISYju4MDYONiIsInNjb3BlcyI6WyJyb31hbGuixSwibGltaXRzIjpbeyJoAwVyIjoiZGv2ZwxcGVyL3NpbHZIciIsInR5cGUiOiJoAHJvdHRsaW5nIn0seyJjaWRycyI6WyIWlJjAuMC4WI10sInR5cGUiOiJjbGl1bnQifV19.YxHptQHFj0GKi0yFao3PTYzqjojUzxstgMRE1_qh1iR_CdQWcSSu_ij2qoxFMOLMrPLhwaJZPopbr1IyhNFtg"
 # ================================
 
 bot = telebot.TeleBot(TOKEN)
@@ -288,7 +288,6 @@ def send_commands_list(message):
 
 @bot.message_handler(func=lambda m: m.text == "🏛 Информация о клане")
 def clan_info(message):
-    # Показываем из кэша, обновляя при возможности
     data = get_clan_data(CLAN_TAG)
     if not data and clan_cache.get("data"):
         data = clan_cache["data"]
@@ -325,9 +324,6 @@ def my_info(message):
     
     text = f"🎮 **Твой игровой ник:** {nick}\n"
     text += f"🏷 **Твой тег:** {tag}"
-    
-    if tag != "не сохранён":
-        text += "\n\n💡 Ты можешь нажать «Информация об аккаунте», чтобы увидеть свою статистику из Clash Royale (скоро добавим)."
     
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
