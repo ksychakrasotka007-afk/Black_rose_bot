@@ -1,2 +1,3 @@
 pytelegrambotapi
 schedule
+clash-royale-python
