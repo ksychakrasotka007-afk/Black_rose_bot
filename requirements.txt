@@ -1,4 +1,4 @@
 pytelegrambotapi
 schedule
 requests
-clash-royale-python
+
