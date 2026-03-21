@@ -8,13 +8,16 @@ import os
 import requests
 from datetime import datetime
 
+# ========== НАСТРОЙКИ ==========
 TOKEN = "8679951155:AAHzQgjWPJxedavRIUdc_EbRm3176jYu_9k"
 CHAT_ID = "-1002227029127"
 ADMIN_ID = 5136954277
 BOT_USERNAME = "BlackRoseCW_bot"
+# ================================
 
 bot = telebot.TeleBot(TOKEN)
 
+# ========== ПОСТОЯННОЕ ХРАНИЛИЩЕ ==========
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -51,15 +54,35 @@ def group_menu():
 def start(message):
     bot.send_message(message.chat.id,
         "👋 Привет! Я бот клана Black Rose.\n\n"
-        "Нажми кнопку и напиши свой игровой ник.",
+        "Нажми кнопку, чтобы добавить свой игровой ник.",
         reply_markup=nick_button())
 
-@bot.message_handler(func=lambda m: m.text == "➕ Добавить свой ник")
-def ask_nick(message):
-    msg = bot.send_message(message.chat.id, "📝 Напиши свой игровой ник (например: xX_Warrior_Xx):")
-    bot.register_next_step_handler(msg, save_nick)
+@bot.message_handler(commands=['menu'])
+def menu_command(message):
+    if message.chat.type in ['group', 'supergroup']:
+        bot.send_message(message.chat.id, "📋 **Меню клана:**", parse_mode="Markdown", reply_markup=group_menu())
 
-def save_nick(message):
+@bot.message_handler(func=lambda m: m.text == "📖 Команды")
+def commands_list(message):
+    text = (
+        "📖 **Команды бота:**\n\n"
+        "👥 **Для всех:**\n"
+        "/start — запустить бота\n"
+        "/list — список ников\n"
+        "/whoami — твой ID\n"
+        "/results — текущие голоса\n\n"
+        "👑 **Админ:**\n"
+        "/del [номер] — удалить игрока\n"
+        "/startvote — запустить опрос"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text == "➕ Добавить свой ник")
+def ask_nick_in_group(message):
+    msg = bot.send_message(message.chat.id, "📝 Напиши свой игровой ник (например: xX_Warrior_Xx):")
+    bot.register_next_step_handler(msg, save_nick_from_group)
+
+def save_nick_from_group(message):
     nick = message.text.strip()
     if len(nick) < 2 or len(nick) > 30:
         bot.send_message(message.chat.id, "❌ Слишком коротко или длинно. Попробуй ещё.", reply_markup=nick_button())
@@ -72,25 +95,6 @@ def save_nick(message):
     }
     save_json(NICK_FILE, game_nicks)
     bot.send_message(message.chat.id, f"✅ Ник **{nick}** сохранён!", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
-
-@bot.message_handler(commands=['nick'])
-def nick_command(message):
-    try:
-        parts = message.text.split()
-        if len(parts) < 2:
-            bot.reply_to(message, "❌ /nick ТвойНик")
-            return
-        nick = parts[1]
-        uid = str(message.from_user.id)
-        game_nicks[uid] = {
-            "game_nick": nick,
-            "tg_username": message.from_user.username,
-            "first_name": message.from_user.first_name
-        }
-        save_json(NICK_FILE, game_nicks)
-        bot.reply_to(message, f"✅ Ник **{nick}** сохранён!", parse_mode="Markdown")
-    except:
-        bot.reply_to(message, "❌ Ошибка")
 
 @bot.message_handler(commands=['list'])
 def list_command(message):
@@ -145,63 +149,34 @@ def results_command(message):
     not_voted = [game_nicks[uid]["game_nick"] for uid in game_nicks if uid not in votes]
     text = "**📊 Текущие результаты:**\n\n"
     if yes:
-        text += f"✅ Идут ({len(yes)}):\n" + "\n".join(f"🎮 {n}" for n in yes) + "\n\n"
+        text += f"✅ Участвуют ({len(yes)}):\n" + "\n".join(f"🎮 {n}" for n in yes) + "\n\n"
     if no:
-        text += f"❌ Не идут ({len(no)}):\n" + "\n".join(f"🎮 {n}" for n in no) + "\n\n"
+        text += f"❌ Не участвуют ({len(no)}):\n" + "\n".join(f"🎮 {n}" for n in no) + "\n\n"
     if not_voted:
         text += f"🤔 Ещё не голосовали ({len(not_voted)})"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
-
-@bot.message_handler(commands=['menu'])
-def menu_command(message):
-    if message.chat.type in ['group', 'supergroup']:
-        bot.send_message(message.chat.id, "📋 **Меню клана:**", parse_mode="Markdown", reply_markup=group_menu())
-
-@bot.message_handler(func=lambda m: m.text == "📖 Команды")
-def commands_list(message):
-    text = (
-        "📖 **Команды бота:**\n\n"
-        "👥 **Для всех:**\n"
-        "/start — запустить бота\n"
-        "/nick [ник] — сохранить игровой ник\n"
-        "/list — список ников\n"
-        "/whoami — твой ID\n"
-        "/results — текущие голоса\n\n"
-        "👑 **Админ:**\n"
-        "/del [номер] — удалить игрока\n"
-        "/startvote — запустить опрос"
-    )
-    bot.send_message(message.chat.id, text, parse_mode="Markdown")
-
-@bot.message_handler(content_types=['new_chat_members'])
-def welcome(message):
-    for user in message.new_chat_members:
-        if user.id == bot.get_me().id:
-            continue
-        bot.send_message(message.chat.id, f"👋 {user.first_name}, напиши боту в личку @{BOT_USERNAME} и нажми «Добавить свой ник»")
-        try:
-            bot.send_message(user.id, "👋 Сохрани свой игровой ник:", reply_markup=nick_button())
-        except:
-            pass
 
 def start_voting():
     global votes
     votes = {}
     save_json(VOTE_FILE, votes)
-    bot.send_message(CHAT_ID, "📢 **Голосование на КВ началось!** Ответьте в личку.", parse_mode="Markdown")
+    bot.send_message(CHAT_ID, "📢 **Голосование началось!** Игроки, проверьте личные сообщения.", parse_mode="Markdown")
     for uid, data in game_nicks.items():
         try:
             markup = types.InlineKeyboardMarkup()
             markup.add(
-                types.InlineKeyboardButton("✅ Да", callback_data=f"vote_yes_{uid}"),
-                types.InlineKeyboardButton("❌ Нет", callback_data=f"vote_no_{uid}")
+                types.InlineKeyboardButton("✅ Участвую", callback_data=f"vote_yes_{uid}"),
+                types.InlineKeyboardButton("❌ Не участвую", callback_data=f"vote_no_{uid}")
             )
-            bot.send_message(uid, f"⚔️ **КВ завтра. Ты идёшь?**\n\nТвой ник: {data['game_nick']}", parse_mode="Markdown", reply_markup=markup)
+            bot.send_message(uid, f"⚔️ **КВ завтра. Ты участвуешь?**\n\nТвой ник: {data['game_nick']}", parse_mode="Markdown", reply_markup=markup)
         except:
             pass
-    threading.Timer(12 * 60 * 60, finish_voting).start()
+    threading.Timer(12 * 60 * 60, end_voting).start()
 
-def finish_voting():
+def end_voting():
+    if not votes:
+        bot.send_message(CHAT_ID, "📭 Голосование завершено. Никто не голосовал.")
+        return
     yes = []
     no = []
     for uid, v in votes.items():
@@ -212,9 +187,9 @@ def finish_voting():
             no.append(f"❌ {nick}")
     text = "**📊 Итоги голосования:**\n\n"
     if yes:
-        text += "✅ **Идут:**\n" + "\n".join(yes) + "\n\n"
+        text += "✅ **Участвуют:**\n" + "\n".join(yes) + "\n\n"
     if no:
-        text += "❌ **Не идут:**\n" + "\n".join(no)
+        text += "❌ **Не участвуют:**\n" + "\n".join(no)
     bot.send_message(CHAT_ID, text, parse_mode="Markdown")
     votes.clear()
     save_json(VOTE_FILE, votes)
@@ -224,17 +199,20 @@ def handle_vote(call):
     uid = str(call.from_user.id)
     _, vote_type, target = call.data.split('_')
     if uid != target:
-        bot.answer_callback_query(call.id, "❌ Нельзя за другого")
+        bot.answer_callback_query(call.id, "❌ Нельзя голосовать за другого")
         return
     if uid not in game_nicks:
-        bot.answer_callback_query(call.id, "❌ Сохрани ник через /nick")
+        bot.answer_callback_query(call.id, "❌ Сначала добавь ник через кнопку в группе")
         return
     if uid in votes:
         bot.answer_callback_query(call.id, "❌ Ты уже голосовал")
         return
     votes[uid] = vote_type
     save_json(VOTE_FILE, votes)
-    bot.answer_callback_query(call.id, "✅ Голос принят!")
+    if vote_type == "yes":
+        bot.answer_callback_query(call.id, "✅ Голос принят: ты участвуешь!")
+    else:
+        bot.answer_callback_query(call.id, "❌ Голос принят: ты не участвуешь")
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
 
 @bot.message_handler(commands=['startvote'])
@@ -245,17 +223,20 @@ def startvote_command(message):
     else:
         bot.reply_to(message, "❌ Только админ")
 
-def daily_vote():
-    now = datetime.now()
-    if now.weekday() in [2, 3, 4, 5, 6]:
-        start_voting()
+@bot.message_handler(commands=['endvote'])
+def endvote_command(message):
+    if is_admin(message.from_user.id):
+        end_voting()
+        bot.reply_to(message, "✅ Голосование завершено досрочно.")
+    else:
+        bot.reply_to(message, "❌ Только админ")
 
-schedule.every().day.at("19:00").do(daily_vote)
-
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+@bot.message_handler(content_types=['new_chat_members'])
+def welcome(message):
+    for user in message.new_chat_members:
+        if user.id == bot.get_me().id:
+            continue
+        bot.send_message(message.chat.id, f"👋 Добро пожаловать, {user.first_name}! Чтобы участвовать в опросах, нажми кнопку «➕ Добавить свой ник».")
 
 if __name__ == "__main__":
     try:
@@ -269,5 +250,4 @@ if __name__ == "__main__":
     print(f"Админ ID: {ADMIN_ID}")
     print(f"Бот: @{BOT_USERNAME}")
 
-    threading.Thread(target=run_schedule, daemon=True).start()
     bot.infinity_polling()
